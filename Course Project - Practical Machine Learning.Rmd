@@ -1,0 +1,263 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "José Maria Fernandes Marlet"
+date: "2022-08-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Executive Summary
+
+## What is the project:
+
+Background Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+According to the reference: “Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).”
+
+## Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+What you should submit The goal of your project is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Main conclusions and considerations
+
+1. The trainingClean dataset is splitted in two dataset, one for training other for testing, the partion will be 70% for training and 30% for testing.
+
+2.  result is a total of 53 covariates for the response variable “classe”.
+
+3. The models tested to correlate the 53 covariates with the response variable classe are: Random Forest (RF); Gradient boosted trees (GBT); Support Vector Machines (SVM).
+
+4. The best model for this dataset is Random Forest with accuracy of 0.995.
+
+# Development of the Course Project - Practical Machine Learning
+
+## oading libraries and packages
+
+```{r}
+
+library(lattice)
+
+library(ggplot2)
+
+library(kernlab)
+
+library(rlang)
+
+library(caret)
+
+library(rpart)
+
+library(rpart.plot)
+
+library(RColorBrewer)
+
+library(rattle)
+
+library(randomForest)
+
+library(corrplot)
+
+library(gbm)
+
+set.seed(1234)
+
+```
+
+## Loading data
+
+The training and testing data sets come for the following url addresses: 
+1. Training: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+2. Testining: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The trainig data set has 19622 rows and 160 columns.
+
+The testing data set has 20 rows and 160 columns.
+
+From both data sets, the first seven columns don’t bring useful information for the model's development and will be eliminated at the data cleaning step.
+
+```{r}
+
+trainingSet <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+
+dim(trainingSet)
+
+testingSet <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+dim(testingSet)
+
+```
+
+## Data cleaning
+
+```{r}
+
+trainingSetClean <- trainingSet[, colSums(is.na(trainingSet)) == 0]
+
+testingSetClean <- testingSet[, colSums(is.na(testingSet)) == 0]
+
+# Remotion from the first seven columns as they don't have impact on the outcome class
+
+trainingClean <- trainingSetClean[, -c(1:7)]
+
+testingClean <- testingSetClean[, -c(1:7)]
+
+dim(trainingClean)
+
+dim(testingClean)
+
+# Removing near zero variance variables: these variables are almost constant and dont't
+# add value to the models.
+
+nzv <- nearZeroVar(trainingClean)
+
+trainingClean <- trainingClean[, -nzv]
+
+dim(trainingClean)
+
+# Converting "classe" to a factor
+
+trainingClean$classe <- as.factor(trainingClean$classe)
+
+```
+
+## Preparing the data sets for prediction
+
+The trainingClean dataset is splitted in two dataset, one for training other for testing, the partion will be 70% for training and 30% for testing.
+
+The result is a total of 53 covariates for the response variable “classe”.
+
+```{r}
+
+inTrain <- createDataPartition(trainingClean$classe, p = 0.7, list = FALSE)
+
+trainSet <- trainingClean[ inTrain,]
+
+testSet <- trainingClean[ -inTrain,]
+
+dim(trainSet)
+
+dim(testSet)
+
+```
+
+## Correlation analysis
+
+The correlation between covariates excluding the the response variable is showed below.The darker is the color the higher the covariates are correlated.
+
+```{r}
+
+correlationMatrix <- cor(trainSet[, -53])
+
+corrplot(correlationMatrix, method = "color", type = "lower", order = "FPC", tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+
+```
+
+## Testing Models
+
+The chosen models to be tested to correlate the 53 covariates with the response variable classe are:
+
+1. Random Forest (RF)
+2. Gradient boosted trees (GBT)
+3. Support Vector Machines (SVM)
+
+The 3 models are compared for accuracy of the predictions.
+
+```{r}
+
+trainCtrl <- trainControl(method = "cv", number = 3, verboseIter = FALSE)
+
+```
+
+## Random Forest (RF)
+
+Shows Accuracy of 0.995.
+
+```{r}
+
+mod_rf <- train(classe ~ ., data = trainSet, method = "rf", trControl = trainCtrl, tuneLength = 5)
+
+pred_rf <- predict(mod_rf, newdata = testSet)
+
+cm_rf <- confusionMatrix(pred_rf, testSet$classe)
+
+cm_rf
+
+```
+
+## Gradient boosted trees (GBT)
+
+Shows accuracy of 0.993.
+
+```{r}
+
+mod_gbm <- train(classe ~ ., data = trainSet, method = "gbm", trControl = trainCtrl, tuneLength = 5, verbose = F)
+
+pred_gbm <- predict(mod_gbm, newdata = testSet)
+
+cm_gbm <- confusionMatrix(pred_gbm, testSet$classe)
+
+cm_gbm
+
+```
+
+## Support Vector Machine (SVM)
+
+Shows accuracy of 0.781.
+
+```{r}
+
+mod_svm <- train(classe ~ ., data = trainSet, method = "svmLinear", trControl = trainCtrl, tuneLength = 5, verbose = F)
+
+pred_svm <- predict(mod_svm, testSet)
+
+cm_svm <- confusionMatrix(pred_svm, testSet$classe)
+
+cm_svm
+
+```
+
+## Model choice:
+
+The model that best fits the data set is the Random Forest.
+
+## Predictions on test set
+
+```{r}
+
+pred <- predict(mod_rf, testingClean)
+
+print(pred)
+
+```
+
+## References
+
+1. https://rpubs.com/bzhang93/coursera-machine-learning-project
+
+2. https://rpubs.com/Marcela/practicalmachinelearning
+
+3. https://rpubs.com/mchenini/353207
+
+4. https://rpubs.com/EsosaOrumwese/835452
+
+5. https://rpubs.com/neerajkbit/pmlproject
+
+6. https://rpubs.com/vinsanity195/895801
+
+
+
